@@ -1,14 +1,13 @@
 #pragma once
 
-#include <iostream>
 #include <utility>
+#include <array>
 #include <map>
 #include <set>
 #include <string>
 #include <concepts>
+#include <cstdint>
 #include <functional>
-#include <bitset>
-#include <memory>
 
 #pragma warning(disable : 4834)
 
@@ -30,96 +29,133 @@ namespace ACS
       : mActorName{ actorName } {}
   };
 
-  struct TypeRegistry
+  using TActor = std::tuple<IActor *, std::uint64_t, void * *>;
+
+  inline static constexpr std::uint64_t               maxComponents{ 64 };
+
+  inline static std::map<std::size_t, std::size_t>    sTypeRegistry{};
+  inline static std::map<std::string, TActor>         sActors      {};
+  inline static std::map<std::string, ISystem *>      sSystems     {};
+
+  template<typename C>
+  requires std::is_base_of_v<IComponent, C>
+  inline static std::size_t Type2Index() noexcept
   {
-    using Registry = std::array<void*, 64>;
+    static std::size_t distinctTypeCount{ 1 };
+    auto const typeIt{ sTypeRegistry.find(typeid(C).hash_code()) };
 
-    std::map<std::size_t, std::size_t> mTypeRegistry     {};
-    std::unique_ptr<Registry>          mComponentRegistry{ std::unique_ptr<Registry>{} };
-
-    template<typename C>
-    inline void RegisterComponent() noexcept
+    if (typeIt == sTypeRegistry.end())
     {
-      static std::size_t index{};
-      auto [typeIt, _] { mTypeRegistry.emplace(typeid(C).hash_code(), index++) };
+      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), distinctTypeCount << 1) };
+      return resultIt->second;
     }
 
-    template<typename C>
-    inline C* GetOrAttach() noexcept
-    {
-      std::size_t const regIdx{ mTypeRegistry.at(typeid(C).hash_code()) };
-      return reinterpret_cast<C*>(mComponentRegistry[regIdx]);
-    }
-  };
-
-  inline static std::map<std::string, IActor*>       sActors           {};
-  inline static std::map<std::string, ISystem*>      sSystems          {};
-
-  inline static std::map<std::size_t, TypeRegistry*> sCompMask2Registry{};
-  inline static std::map<IActor*,     TypeRegistry*> sActor2Registry   {};
+    return typeIt->second;
+  }
 
   template<typename A>
   requires std::is_base_of_v<IActor, A>
-  inline static A*      Create(std::string const& actorName) noexcept
+  inline static A *         Create(std::string const& actorName) noexcept
   {
-    auto [actorIt, _] { sActors.emplace(actorName, new A{ actorName }) };
-    return reinterpret_cast<A*>(actorIt->second);
+    auto [actorIt, _] { sActors.emplace(actorName, std::tuple<IActor *, std::uint64_t>{ new A{ actorName }, 0 }) };
+    return reinterpret_cast<A*>(std::get<0>(actorIt->second));
   }
 
   template<typename C>
   requires std::is_base_of_v<IComponent, C>
-  inline static C*      GetOrAttach(std::string const& actorName) noexcept
+  inline static C *         GetOrAttach(std::string const & actorName) noexcept
   {
-    //auto actorIt{ sActors.find(actorName) };
-    //if (actorIt == sActors.end()) return nullptr;
+    // opt this section away
+    auto const actorIt{ sActors.find(actorName) };
+    if (actorIt == sActors.end()) return nullptr;
 
-    //auto [compIt, _] { actorIt->second->mComponents.emplace(typeid(C).name(), new C{ actorName }) };
-    //return reinterpret_cast<C*>(compIt->second);
+    // dont xor use uint128 and shifts
+    std::size_t const actorIndex{ std::uintptr_t(&std::get<0>(actorIt->second)) };
+    std::size_t const typeIndex{ Type2Index<C>() };
 
-    
+    u128 const compIndex{ actorIndex, typeIndex };
 
-    return nullptr;
+    auto const compIt{ sComponents.find(compIndex) };
+
+    Registers * pRegisters{};
+
+    if (compIt == sComponents.end())
+    {
+      auto const [resultIt, _] { sComponents.emplace(compIndex, new Registers) };
+      
+      Registers * pRegisters = resultIt->second;
+      pRegisters->mMask |= typeIndex;
+      pRegisters->mppRegisters = static_cast<void * *>(std::malloc(sizeof(void *) * maxComponents));
+
+      std::memset(pRegisters->mppRegisters, 0, sizeof(void *) * maxComponents);
+
+      std::get<1>(actorIt->second) |= typeIndex;
+    }
+    else
+    {
+      pRegisters = compIt->second;
+    }
+
+    void * pRegister = pRegisters->mppRegisters[typeIndex];
+
+    if (!pRegister)
+    {
+      pRegister = new C{ actorName };
+    }
+
+    return reinterpret_cast<C *>(pRegister);
   }
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
-  inline static S*      Register(Args&&... arg) noexcept
+  inline static S *         Register(Args && ... args) noexcept
   {
-    auto [sysIt, _] { sSystems.emplace(typeid(S).name(), new S{ std::forward<Args>(arg)... }) };
-    return reinterpret_cast<S*>(sysIt->second);
+    auto const [sysIt, _] { sSystems.emplace(typeid(S).name(), new S{ std::forward<Args>(args) ... }) };
+    return reinterpret_cast<S *>(sysIt->second);
   }
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
-  inline static void    Update(Args&&... arg) noexcept
+  inline static void        Update(Args && ... args) noexcept
   {
-    for (const auto& [systemName, pSystem] : sSystems)
-      (*reinterpret_cast<S*>(pSystem))(std::forward<Args>(arg)...);
+    for (const auto & [systemName, pSystem] : sSystems)
+      (* reinterpret_cast<S *>(pSystem))(std::forward<Args>(args) ...);
   }
 
-  template<typename T>
-  struct IdentityType
+  template<typename C>
+  requires std::is_base_of_v<IComponent, C>
+  struct Identity
   {
-    using Type    = T;
-    using Pointer = T*;
+    using Type    = C;
+    using Pointer = C *;
   };
 
   template<typename ... Components>
-  inline static void    ForEach(std::function<void(typename IdentityType<Components>::Pointer...)> const& predicate) noexcept
+  inline static void    ForEach(std::function<void(typename Identity<Components>::Pointer...)> const & predicate) noexcept
   {
-    std::size_t const typeHash{ (typeid(typename IdentityType<Components>::Type).hash_code() | ... | 0) };
-
-    //using C = decltype(func);
-
-    for (const auto& [actorName, pActor] : sActors)
+    for (auto const & [actorName, actor ] : sActors)
     {
-      std::size_t const compHash{ std::uintptr_t{ pActor } };
+      IActor * pActor{ std::get<0>(actor) };
+      std::uint64_t compMask{ std::get<1>(actor) };
 
-      //sComponents.at(compHash);
+      std::size_t const actorIndex{ std::uintptr_t(pActor) };
+      std::size_t const typeIndex{ (Type2Index<typename Identity<Components>::Type>() | ... | 0) };
 
-      //auto compIt{ pActor->mComponents.find(typeid(C).name()) };
-      //if (compIt == pActor->mComponents.end()) continue;
-      //func((reinterpret_cast<C*>(compIt->second)));
+      if (compMask != typeIndex) continue;
+
+      u128 const compIndex{ actorIndex, typeIndex };
+
+      // is this find rly required
+      auto const compIt{ sComponents.find(compIndex) };
+
+      if (compIt == sComponents.end()) continue;
+
+      Registers * pRegisters{ compIt->second };
+
+      // type index wont work for multiple type xors
+      // fold expr required to apply predicate to all sub-components
+      (predicate((reinterpret_cast<typename Identity<Components>::Pointer>(pRegisters->mppRegisters[Type2Index<typename Identity<Components>::Type>()]))), ...);
     }
   }
+
 }
