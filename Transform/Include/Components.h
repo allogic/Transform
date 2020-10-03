@@ -1,42 +1,61 @@
 #pragma once
 
-#include <Types.h>
 #include <ACS.h>
+
+#include <olcPixelGameEngine.h>
 
 #include <string>
 
 struct Transform : ACS::IComponent
 {
-  r32vec2 mPosition{};
-  r32     mRotation{};
-  r32vec2 mScale   {};
-
-  Transform(std::string const & actorName)
-    : IComponent(actorName) {}
+  olc::vi2d mPosition{};
+  float     mRotation{};
+  olc::vi2d mScale   {};
 };
 
 struct Camera : ACS::IComponent
 {
-  Camera(std::string const & actorName)
-    : IComponent(actorName) {}
+
 };
 
-struct Quad : ACS::IComponent
+struct Decal : ACS::IComponent
 {
-  r32vec2 mPosition{};
-  r32vec2 mSize    {};
+  olc::Decal mDecal;
 
-  Quad(std::string const & actorName)
-    : IComponent(actorName) {}
+  Decal(olc::Sprite * pSprite)
+    : mDecal{ pSprite } {}
 };
 
-struct Gizmos : ACS::IComponent
+struct Material : ACS::IComponent
 {
-  Transform * mpTransform{};
-  Quad *      mpQuad     {};
+  
+};
 
-  Gizmos(std::string const & actorName)
-    : mpTransform{ ACS::GetOrAttach<Transform>(actorName) }
-    , mpQuad{ ACS::GetOrAttach<Quad>(actorName) }
-    , IComponent(actorName) {}
+struct IBlockStatic : ACS::IComponent
+{
+  olc::vi2d mPosition{};
+  olc::vi2d mSize    {};
+};
+
+struct IBlockDynamic : ACS::IComponent
+{
+  olc::vi2d mPosition{};
+  olc::vi2d mSize    {};
+  olc::vf2d mVelocity{};
+};
+
+enum struct BlockStaticTypes : unsigned char
+{
+  Resource,
+};
+
+enum struct BlockDynamicTypes : unsigned char
+{
+  Something,
+};
+
+struct BlockResource : IBlockStatic
+{
+  float             mSpawnRate{};
+  BlockDynamicTypes mBlockType{};
 };

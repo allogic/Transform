@@ -389,8 +389,8 @@
     <ClInclude Include="Include\ACS.h" />
     <ClInclude Include="Include\Actors.h" />
     <ClInclude Include="Include\Components.h" />
+    <ClInclude Include="Include\Debug.h" />
     <ClInclude Include="Include\Systems.h" />
-    <ClInclude Include="Include\Types.h" />
     <ClInclude Include="olcPixelGameEngine.h" />
   </ItemGroup>
   <ItemGroup>

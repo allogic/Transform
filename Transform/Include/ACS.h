@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utility>
-#include <array>
 #include <map>
 #include <set>
 #include <string>
@@ -19,7 +18,7 @@ namespace ACS
   };
   struct IComponent
   {
-    IComponent(std::string const& actorName) {}
+    
   };
   struct IActor
   {
@@ -29,96 +28,108 @@ namespace ACS
       : mActorName{ actorName } {}
   };
 
-  using TActor = std::tuple<IActor *, std::uint64_t, void * *>;
+  struct Actor
+  {
+    IActor *      mpActor     {};
+    std::uint64_t mMask       {};
+    void * *      mppRegisters{};
+  };
+  struct Key
+  {
+    char          mLogicalIndex{};
+    std::uint64_t mMaskBit     {};
+  };
 
-  inline static constexpr std::uint64_t               maxComponents{ 64 };
+  inline static std::size_t                      sDistinctTypeCount{};
+  inline static std::map<std::size_t, Key>       sTypeRegistry     {};
+  inline static std::map<std::string, Actor>     sActors           {};
+  inline static std::map<std::size_t, ISystem *> sSystems          {};
 
-  inline static std::map<std::size_t, std::size_t>    sTypeRegistry{};
-  inline static std::map<std::string, TActor>         sActors      {};
-  inline static std::map<std::string, ISystem *>      sSystems     {};
-
-  template<typename C>
+  // obsolete -> make constexpr hash map, maybe xor will do..
+  template<typename C, bool AsLogicalIndex>
   requires std::is_base_of_v<IComponent, C>
   inline static std::size_t Type2Index() noexcept
   {
-    static std::size_t distinctTypeCount{ 1 };
     auto const typeIt{ sTypeRegistry.find(typeid(C).hash_code()) };
 
     if (typeIt == sTypeRegistry.end())
     {
-      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), distinctTypeCount << 1) };
-      return resultIt->second;
+      Key key
+      {
+        .mLogicalIndex{ static_cast<char>(sDistinctTypeCount) },
+        .mMaskBit     { static_cast<std::uint64_t>(1) << sDistinctTypeCount },
+      };
+
+      sDistinctTypeCount++;
+
+      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), std::move(key)) };
+
+      if constexpr (AsLogicalIndex) return resultIt->second.mLogicalIndex;
+      else                          return resultIt->second.mMaskBit;
     }
 
-    return typeIt->second;
+    if constexpr (AsLogicalIndex) return typeIt->second.mLogicalIndex;
+    else                          return typeIt->second.mMaskBit;
+  }
+
+  template<typename ... C>
+  requires (std::is_base_of_v<IComponent, C>, ...)
+  inline static constexpr std::size_t Types2Mask()
+  {
+    return (typeid(C).hash_code() | ... | 0);
   }
 
   template<typename A>
   requires std::is_base_of_v<IActor, A>
-  inline static A *         Create(std::string const& actorName) noexcept
+  inline static A *         Create(std::string const & actorName) noexcept
   {
-    auto [actorIt, _] { sActors.emplace(actorName, std::tuple<IActor *, std::uint64_t>{ new A{ actorName }, 0 }) };
-    return reinterpret_cast<A*>(std::get<0>(actorIt->second));
+    Actor actor
+    {
+      .mpActor     { new A{ actorName } },
+      .mMask       {},
+      .mppRegisters{ static_cast<void * *>(std::malloc(sizeof(void *) * 64)) },
+    };
+
+    std::memset(actor.mppRegisters, 0, sizeof(void *) * 64);
+
+    auto const [actorIt, _] { sActors.emplace(actorName, std::move(actor)) };
+    return reinterpret_cast<A *>(actorIt->second.mpActor);
   }
 
-  template<typename C>
+  template<typename C, typename ... Args>
   requires std::is_base_of_v<IComponent, C>
-  inline static C *         GetOrAttach(std::string const & actorName) noexcept
+  inline static C *         GetOrAttach(std::string const & actorName, Args && ... args) noexcept
   {
-    // opt this section away
     auto const actorIt{ sActors.find(actorName) };
     if (actorIt == sActors.end()) return nullptr;
 
-    // dont xor use uint128 and shifts
-    std::size_t const actorIndex{ std::uintptr_t(&std::get<0>(actorIt->second)) };
-    std::size_t const typeIndex{ Type2Index<C>() };
+    Actor & actor{ actorIt->second };
 
-    u128 const compIndex{ actorIndex, typeIndex };
+    std::size_t const mLogicalIndex{ Type2Index<C, true>() };
+    std::size_t const maskBit{ Type2Index<C, false>() };
 
-    auto const compIt{ sComponents.find(compIndex) };
-
-    Registers * pRegisters{};
-
-    if (compIt == sComponents.end())
+    if (! (actor.mMask & maskBit))
     {
-      auto const [resultIt, _] { sComponents.emplace(compIndex, new Registers) };
-      
-      Registers * pRegisters = resultIt->second;
-      pRegisters->mMask |= typeIndex;
-      pRegisters->mppRegisters = static_cast<void * *>(std::malloc(sizeof(void *) * maxComponents));
-
-      std::memset(pRegisters->mppRegisters, 0, sizeof(void *) * maxComponents);
-
-      std::get<1>(actorIt->second) |= typeIndex;
-    }
-    else
-    {
-      pRegisters = compIt->second;
+      actor.mMask |= maskBit;
+      actor.mppRegisters[mLogicalIndex] = new C{ std::forward<Args>(args) ... };
     }
 
-    void * pRegister = pRegisters->mppRegisters[typeIndex];
-
-    if (!pRegister)
-    {
-      pRegister = new C{ actorName };
-    }
-
-    return reinterpret_cast<C *>(pRegister);
+    return reinterpret_cast<C *>(actor.mppRegisters[mLogicalIndex]);
   }
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
   inline static S *         Register(Args && ... args) noexcept
   {
-    auto const [sysIt, _] { sSystems.emplace(typeid(S).name(), new S{ std::forward<Args>(args) ... }) };
-    return reinterpret_cast<S *>(sysIt->second);
+    auto const [sysemIt, _] { sSystems.emplace(typeid(S).hash_code(), new S{ std::forward<Args>(args) ... }) };
+    return reinterpret_cast<S *>(sysemIt->second);
   }
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
   inline static void        Update(Args && ... args) noexcept
   {
-    for (const auto & [systemName, pSystem] : sSystems)
+    for (const auto & [hash, pSystem] : sSystems)
       (* reinterpret_cast<S *>(pSystem))(std::forward<Args>(args) ...);
   }
 
@@ -130,31 +141,25 @@ namespace ACS
     using Pointer = C *;
   };
 
+  // maybe parallelize?
+  // build queuing system..
   template<typename ... Components>
   inline static void    ForEach(std::function<void(typename Identity<Components>::Pointer...)> const & predicate) noexcept
   {
-    for (auto const & [actorName, actor ] : sActors)
+    for (auto const & [name, actor] : sActors)
     {
-      IActor * pActor{ std::get<0>(actor) };
-      std::uint64_t compMask{ std::get<1>(actor) };
+      std::size_t const mask{ (Type2Index<typename Identity<Components>::Type, false>() | ... | 0) };
 
-      std::size_t const actorIndex{ std::uintptr_t(pActor) };
-      std::size_t const typeIndex{ (Type2Index<typename Identity<Components>::Type>() | ... | 0) };
-
-      if (compMask != typeIndex) continue;
-
-      u128 const compIndex{ actorIndex, typeIndex };
-
-      // is this find rly required
-      auto const compIt{ sComponents.find(compIndex) };
-
-      if (compIt == sComponents.end()) continue;
-
-      Registers * pRegisters{ compIt->second };
-
-      // type index wont work for multiple type xors
-      // fold expr required to apply predicate to all sub-components
-      (predicate((reinterpret_cast<typename Identity<Components>::Pointer>(pRegisters->mppRegisters[Type2Index<typename Identity<Components>::Type>()]))), ...);
+      if (actor.mMask & mask)
+      {
+        predicate
+        (
+          reinterpret_cast<typename Identity<Components>::Pointer>
+          (
+            actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
+          ) ...
+        );
+      }
     }
   }
 

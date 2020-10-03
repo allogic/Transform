@@ -6,6 +6,6 @@
 
 struct MyActor : ACS::IActor
 {
-  MyActor(std::string const& actorName)
+  MyActor(std::string const & actorName)
     : IActor(actorName) {}
 };

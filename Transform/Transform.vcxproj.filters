@@ -30,9 +30,6 @@
     <ClInclude Include="Include\Actors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Include\Types.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="glm\detail\_features.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -754,6 +751,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="glm\vector_relational.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\Debug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

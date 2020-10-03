@@ -7,63 +7,71 @@
 
 #include <random>
 
-struct Manager : ACS::ISystem
+struct BlockManager : ACS::ISystem
 {
-  olc::PixelGameEngine* mpEngine{};
+  olc::PixelGameEngine * mpEngine{};
+  olc::Sprite            mSpriteDirt{ 16, 16 };
 
-  Manager(olc::PixelGameEngine* engine)
-    : mpEngine{ engine }
-    , ISystem() {}
+  BlockManager(olc::PixelGameEngine * pEngine)
+    : mpEngine{ pEngine }
+  {
+    mSpriteDirt.LoadFromFile("C:\\Users\\Michael\\Downloads\\Transform\\Sprites\\BlockDirt.bmp");
+
+    for (unsigned int i{}; i < 40; i++)
+      for (unsigned int j{}; j < 30; j++)
+      {
+        std::string const actorName{ "actor_" + std::to_string(i) + "_" + std::to_string(j) };
+
+        auto pActor{ ACS::Create<MyActor>(actorName) };
+        auto pBlockResource{ ACS::GetOrAttach<BlockResource>(actorName) };
+        auto pDecal{ ACS::GetOrAttach<Decal>(actorName, &mSpriteDirt) };
+
+        pBlockResource->mPosition = olc::vi2d{ (int)i * 16, (int)j * 16 };
+        pBlockResource->mSize = olc::vi2d{ 1, 1 };
+      }
+  }
 
   void operator () (float elapsedTime) override
   {
-    static bool initialized{};
 
-    if (!initialized)
-    {
-      initialized = true;
-
-      for (unsigned int i{}; i < 1000; i++)
-      {
-        std::string const actorName{ "actor" + std::to_string(i) };
-
-        auto pActor{ ACS::Create<MyActor>(actorName) };
-        auto pGizmos{ ACS::GetOrAttach<Gizmos>(actorName) };
-        auto pTransform{ ACS::GetOrAttach<Transform>(actorName) };
-        auto pQuad{ ACS::GetOrAttach<Quad>(actorName) };
-
-        pTransform->mPosition = r32vec2{ std::rand() % mpEngine->ScreenWidth(), std::rand() % mpEngine->ScreenHeight() };
-        pQuad->mSize = r32vec2{ std::rand() % 10, std::rand() % 10 };
-      }
-    }
   }
 };
 
-struct Renderer : ACS::ISystem
+struct BlockBehaviour : ACS::ISystem
 {
-  olc::PixelGameEngine* mpEngine{};
+  void operator () (float elapsedTime) override
+  {
+    
+  }
+};
 
-  Renderer(olc::PixelGameEngine* engine)
-    : mpEngine{ engine }
-    , ISystem() {}
+struct BlockStaticRenderer : ACS::ISystem
+{
+  olc::PixelGameEngine * mpEngine{};
+
+  BlockStaticRenderer(olc::PixelGameEngine * pEngine)
+    : mpEngine{ pEngine } {}
 
   void operator () (float elapsedTime) override
   {
-    ACS::ForEach<Gizmos>([=](Gizmos* pGizmos)
+    ACS::ForEach<BlockResource, Decal>([=](
+      BlockResource * pBlockResource,
+      Decal *         pDecal)
     {
-      olc::vi2d const position
-      {
-        static_cast<int>(pGizmos->mpTransform->mPosition.x + pGizmos->mpQuad->mPosition.x),
-        static_cast<int>(pGizmos->mpTransform->mPosition.y + pGizmos->mpQuad->mPosition.y)
-      };
-
-      olc::vi2d const size
-      {
-        static_cast<int>(pGizmos->mpQuad->mSize.x),
-        static_cast<int>(pGizmos->mpQuad->mSize.y),
-      };
-
-      mpEngine->DrawRect(position, size);
+      mpEngine->DrawDecal(pBlockResource->mPosition, &pDecal->mDecal, pBlockResource->mSize);
     });
+  }
+};
+
+struct BlockDynamicRenderer : ACS::ISystem
+{
+  olc::PixelGameEngine* mpEngine{};
+
+  BlockDynamicRenderer(olc::PixelGameEngine* pEngine)
+    : mpEngine{ pEngine } {}
+
+  void operator () (float elapsedTime) override
+  {
+    
   }
 };
