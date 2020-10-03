@@ -25,6 +25,8 @@ struct Sandbox
   }
   bool OnUserUpdate(float elapsedTime) override
   {
+    // submit update instructions
+
     MEASURE_BEGIN(BlockManager);
     ACS::Update<BlockManager>(elapsedTime);
     MEASURE_END(BlockManager);
@@ -40,6 +42,8 @@ struct Sandbox
     MEASURE_BEGIN(BlockDynamicRenderer)
     ACS::Update<BlockDynamicRenderer>(elapsedTime);
     MEASURE_END(BlockDynamicRenderer);
+
+    // execute update instructions
 
     return true;
   }

@@ -141,6 +141,18 @@ namespace ACS
     using Pointer = C *;
   };
 
+  struct Instruction
+  {
+    std::uint64_t mMask;
+  };
+
+  using Instructions = std::set<Instruction>;
+
+  inline static void    Submit(Instruction const & instruction)
+  {
+
+  }
+
   // maybe parallelize?
   // build queuing system..
   template<typename ... Components>
