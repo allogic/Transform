@@ -31,15 +31,15 @@ struct Sandbox
     ACS::Update<BlockManager>(elapsedTime);
     MEASURE_END(BlockManager);
 
-    MEASURE_BEGIN(BlockBehaviour)
+    MEASURE_BEGIN(BlockBehaviour);
     ACS::Update<BlockBehaviour>(elapsedTime);
     MEASURE_END(BlockBehaviour);
 
-    MEASURE_BEGIN(BlockStaticRenderer)
+    MEASURE_BEGIN(BlockStaticRenderer);
     ACS::Update<BlockStaticRenderer>(elapsedTime);
     MEASURE_END(BlockStaticRenderer);
 
-    MEASURE_BEGIN(BlockDynamicRenderer)
+    MEASURE_BEGIN(BlockDynamicRenderer);
     ACS::Update<BlockDynamicRenderer>(elapsedTime);
     MEASURE_END(BlockDynamicRenderer);
 
