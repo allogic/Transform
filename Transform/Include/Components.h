@@ -20,6 +20,7 @@ struct Camera : ACS::IComponent
 
 struct Decal : ACS::IComponent
 {
+  // use std::optional for non default init mem
   olc::Decal mDecal;
 
   Decal(olc::Sprite * pSprite)

@@ -1,31 +1,43 @@
 #pragma once
 
+#include <Debug.h>
+
 #include <utility>
 #include <map>
 #include <set>
+#include <array>
 #include <string>
 #include <concepts>
 #include <cstdint>
 #include <functional>
+#include <future>
 
 #pragma warning(disable : 4834)
 
 namespace ACS
 {
+  struct IComponent
+  {
+
+  };
   struct ISystem
   {
     virtual void operator () (float elapsedTime) = 0;
-  };
-  struct IComponent
-  {
-    
   };
   struct IActor
   {
     std::string mActorName{};
 
-    IActor(std::string const& actorName)
+    IActor(std::string const & actorName)
       : mActorName{ actorName } {}
+  };
+
+  template<typename C>
+  requires std::is_base_of_v<IComponent, C>
+  struct Identity
+  {
+    using Type = C;
+    using Pointer = C*;
   };
 
   struct Actor
@@ -39,16 +51,25 @@ namespace ACS
     char          mLogicalIndex{};
     std::uint64_t mMaskBit     {};
   };
+  struct Job
+  {
+    std::uint64_t mMask     {};
+    void *        mpFunction{};
 
-  inline static std::size_t                      sDistinctTypeCount{};
-  inline static std::map<std::size_t, Key>       sTypeRegistry     {};
-  inline static std::map<std::string, Actor>     sActors           {};
-  inline static std::map<std::size_t, ISystem *> sSystems          {};
+    inline bool operator < (Job const & job) const noexcept { return mMask < job.mMask; }
+  };
+
+  inline static std::uint64_t                      sDistinctTypeCount{};
+  inline static std::map<std::uint64_t, Key>       sTypeRegistry     {};
+  inline static std::map<std::string, Actor>       sActors           {};
+  inline static std::map<std::uint64_t, ISystem *> sSystems          {};
+  inline static std::set<Job>                      sJobs             {};
 
   // obsolete -> make constexpr hash map, maybe xor will do..
+  // try reverse range AND monoid
   template<typename C, bool AsLogicalIndex>
   requires std::is_base_of_v<IComponent, C>
-  inline static std::size_t Type2Index() noexcept
+  inline static std::uint64_t Type2Index() noexcept
   {
     auto const typeIt{ sTypeRegistry.find(typeid(C).hash_code()) };
 
@@ -62,7 +83,7 @@ namespace ACS
 
       sDistinctTypeCount++;
 
-      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), std::move(key)) };
+      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), key) };
 
       if constexpr (AsLogicalIndex) return resultIt->second.mLogicalIndex;
       else                          return resultIt->second.mMaskBit;
@@ -72,16 +93,34 @@ namespace ACS
     else                          return typeIt->second.mMaskBit;
   }
 
-  template<typename ... C>
+  inline constexpr static std::uint64_t                 csTypeDistinctCount{};
+  inline constexpr static std::uint64_t                 csTypeMask{};
+  inline constexpr static std::array<std::uint64_t, 64> csTypeHashMap{};
+
+  template<std::uint64_t Limit, typename ... C>
   requires (std::is_base_of_v<IComponent, C>, ...)
-  inline static constexpr std::size_t Types2Mask()
+  inline constexpr std::uint64_t Types2MaskXor()
   {
-    return (typeid(C).hash_code() | ... | 0);
+    return (typeid(C).hash_code() | ... | 0) % Limit;
+  }
+
+  template<typename C>
+  requires std::is_base_of_v<IComponent, C>
+  inline constexpr std::uint64_t Component2Flag() noexcept
+  {
+    std::uint64_t const maskBit{ Types2MaskXor<64, C>() };
+
+    return 0;
+  }
+
+  inline constexpr std::uint64_t Mask2Component(std::uint64_t mask) noexcept
+  {
+    return 0;
   }
 
   template<typename A>
   requires std::is_base_of_v<IActor, A>
-  inline static A *         Create(std::string const & actorName) noexcept
+  inline static A *         CreateActor(std::string const & actorName) noexcept
   {
     Actor actor
     {
@@ -92,7 +131,7 @@ namespace ACS
 
     std::memset(actor.mppRegisters, 0, sizeof(void *) * 64);
 
-    auto const [actorIt, _] { sActors.emplace(actorName, std::move(actor)) };
+    auto const [actorIt, _] { sActors.emplace(actorName, actor) };
     return reinterpret_cast<A *>(actorIt->second.mpActor);
   }
 
@@ -105,16 +144,16 @@ namespace ACS
 
     Actor & actor{ actorIt->second };
 
-    std::size_t const mLogicalIndex{ Type2Index<C, true>() };
-    std::size_t const maskBit{ Type2Index<C, false>() };
+    std::uint64_t const logicalIndex{ Type2Index<C, true>() };
+    std::uint64_t const maskBit{ Type2Index<C, false>() };
 
     if (! (actor.mMask & maskBit))
     {
       actor.mMask |= maskBit;
-      actor.mppRegisters[mLogicalIndex] = new C{ std::forward<Args>(args) ... };
+      actor.mppRegisters[logicalIndex] = new C{ std::forward<Args>(args) ... };
     }
 
-    return reinterpret_cast<C *>(actor.mppRegisters[mLogicalIndex]);
+    return reinterpret_cast<C *>(actor.mppRegisters[logicalIndex]);
   }
 
   template<typename S, typename ... Args>
@@ -127,52 +166,61 @@ namespace ACS
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
-  inline static void        Update(Args && ... args) noexcept
+  inline static void        UpdateSystem(Args && ... args) noexcept
   {
     for (const auto & [hash, pSystem] : sSystems)
       (* reinterpret_cast<S *>(pSystem))(std::forward<Args>(args) ...);
   }
 
-  template<typename C>
-  requires std::is_base_of_v<IComponent, C>
-  struct Identity
-  {
-    using Type    = C;
-    using Pointer = C *;
-  };
-
-  struct Instruction
-  {
-    std::uint64_t mMask;
-  };
-
-  using Instructions = std::set<Instruction>;
-
-  inline static void    Submit(Instruction const & instruction)
-  {
-
-  }
-
   // maybe parallelize?
   // build queuing system..
-  template<typename ... Components>
-  inline static void    ForEach(std::function<void(typename Identity<Components>::Pointer...)> const & predicate) noexcept
+  template<typename S, typename ... Components>
+  requires std::is_base_of_v<ISystem, S> && (std::is_base_of_v<IComponent, typename Identity<Components>::Type>, ...)
+  inline static void        SubmitJob(void(* pFunction)(S *, typename Identity<Components>::Pointer...)) noexcept
+  {
+    Job job
+    {
+      (Type2Index<typename Identity<Components>::Type, false>() | ... | 0),
+      pFunction
+    };
+
+    sJobs.insert(job);
+  }
+
+  inline static void        Dispatch() noexcept
   {
     for (auto const & [name, actor] : sActors)
-    {
-      std::size_t const mask{ (Type2Index<typename Identity<Components>::Type, false>() | ... | 0) };
-
-      if (actor.mMask & mask)
+      for (auto const & job : sJobs)
       {
-        predicate
-        (
-          reinterpret_cast<typename Identity<Components>::Pointer>
-          (
-            actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
-          ) ...
-        );
+        if (job.mMask == actor.mMask)
+        {
+          //predicate
+          //(
+          //  reinterpret_cast<typename Identity<Components>::Pointer>
+          //  (
+          //    actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
+          //  ) ...
+          //);
+        }
+
+
+        //MEASURE_BEGIN(CalcMask);
+        //std::uint64_t const mask{ (Type2Index<typename Identity<Components>::Type, false>() | ... | 0) };
+        //MEASURE_END(CalcMask);
+
+        //if (actor.mMask & mask)
+        //{
+        //  //MEASURE_BEGIN(Predicate);
+        //  //predicate
+        //  //(
+        //  //  reinterpret_cast<typename Identity<Components>::Pointer>
+        //  //  (
+        //  //    actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
+        //  //  ) ...
+        //  //);
+        //  //MEASURE_END(Predicate);
+        //}
       }
-    }
   }
 
 }

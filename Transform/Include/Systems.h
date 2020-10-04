@@ -22,9 +22,9 @@ struct BlockManager : ACS::ISystem
       {
         std::string const actorName{ "actor_" + std::to_string(i) + "_" + std::to_string(j) };
 
-        auto pActor{ ACS::Create<MyActor>(actorName) };
+        auto pActor{ ACS::CreateActor<MyActor>(actorName) };
         auto pBlockResource{ ACS::GetOrAttach<BlockResource>(actorName) };
-        auto pDecal{ ACS::GetOrAttach<Decal>(actorName, &mSpriteDirt) };
+        auto pDecal{ ACS::GetOrAttach<Decal>(actorName, & mSpriteDirt) };
 
         pBlockResource->mPosition = olc::vi2d{ (int)i * 16, (int)j * 16 };
         pBlockResource->mSize = olc::vi2d{ 1, 1 };
@@ -37,7 +37,7 @@ struct BlockManager : ACS::ISystem
   }
 };
 
-struct BlockBehaviour : ACS::ISystem
+struct BlockAI : ACS::ISystem
 {
   void operator () (float elapsedTime) override
   {
@@ -45,33 +45,23 @@ struct BlockBehaviour : ACS::ISystem
   }
 };
 
-struct BlockStaticRenderer : ACS::ISystem
-{
-  olc::PixelGameEngine * mpEngine{};
-
-  BlockStaticRenderer(olc::PixelGameEngine * pEngine)
-    : mpEngine{ pEngine } {}
-
-  void operator () (float elapsedTime) override
-  {
-    ACS::ForEach<BlockResource, Decal>([=](
-      BlockResource * pBlockResource,
-      Decal *         pDecal)
-    {
-      mpEngine->DrawDecal(pBlockResource->mPosition, &pDecal->mDecal, pBlockResource->mSize);
-    });
-  }
-};
+// remove static block handler since it's no longer
+// part of the component system
 
 struct BlockDynamicRenderer : ACS::ISystem
 {
-  olc::PixelGameEngine* mpEngine{};
+  olc::PixelGameEngine * mpEngine{};
 
-  BlockDynamicRenderer(olc::PixelGameEngine* pEngine)
+  BlockDynamicRenderer(olc::PixelGameEngine * pEngine)
     : mpEngine{ pEngine } {}
+
+  static void Lol(BlockDynamicRenderer * pDynamicRenderer, BlockResource * pBlockResource, Decal * pDecal)
+  {
+    pDynamicRenderer->mpEngine->DrawDecal(pBlockResource->mPosition, & pDecal->mDecal, pBlockResource->mSize);
+  }
 
   void operator () (float elapsedTime) override
   {
-    
+    ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(& BlockDynamicRenderer::Lol);
   }
 };
