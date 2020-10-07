@@ -23,8 +23,8 @@ struct BlockManager : ACS::ISystem
         std::string const actorName{ "actor_" + std::to_string(i) + "_" + std::to_string(j) };
 
         auto pActor{ ACS::CreateActor<MyActor>(actorName) };
-        auto pBlockResource{ ACS::GetOrAttach<BlockResource>(actorName) };
-        auto pDecal{ ACS::GetOrAttach<Decal>(actorName, & mSpriteDirt) };
+        auto pBlockResource{ ACS::GetOrAttachComponent<BlockResource>(actorName) };
+        auto pDecal{ ACS::GetOrAttachComponent<Decal>(actorName, & mSpriteDirt) };
 
         pBlockResource->mPosition = olc::vi2d{ (int)i * 16, (int)j * 16 };
         pBlockResource->mSize = olc::vi2d{ 1, 1 };
@@ -55,13 +55,13 @@ struct BlockDynamicRenderer : ACS::ISystem
   BlockDynamicRenderer(olc::PixelGameEngine * pEngine)
     : mpEngine{ pEngine } {}
 
-  static void Lol(BlockDynamicRenderer * pDynamicRenderer, BlockResource * pBlockResource, Decal * pDecal)
-  {
-    pDynamicRenderer->mpEngine->DrawDecal(pBlockResource->mPosition, & pDecal->mDecal, pBlockResource->mSize);
-  }
-
   void operator () (float elapsedTime) override
   {
-    ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(& BlockDynamicRenderer::Lol);
+    ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(this);
+  }
+
+  void operator () (BlockDynamicRenderer * pDynamicRenderer, BlockResource * pBlockResource, Decal * pDecal)
+  {
+    pDynamicRenderer->mpEngine->DrawDecal(pBlockResource->mPosition, &pDecal->mDecal, pBlockResource->mSize);
   }
 };

@@ -6,13 +6,14 @@
 #include <map>
 #include <set>
 #include <array>
+#include <tuple>
 #include <string>
 #include <concepts>
 #include <cstdint>
 #include <functional>
-#include <future>
+#include <utility>
 
-#pragma warning(disable : 4834)
+//#pragma warning(disable : 4834)
 
 namespace ACS
 {
@@ -36,7 +37,7 @@ namespace ACS
   requires std::is_base_of_v<IComponent, C>
   struct Identity
   {
-    using Type = C;
+    using Type    = C;
     using Pointer = C*;
   };
 
@@ -54,7 +55,7 @@ namespace ACS
   struct Job
   {
     std::uint64_t mMask     {};
-    void *        mpFunction{};
+    void *        mpInstance{};
 
     inline bool operator < (Job const & job) const noexcept { return mMask < job.mMask; }
   };
@@ -65,8 +66,6 @@ namespace ACS
   inline static std::map<std::uint64_t, ISystem *> sSystems          {};
   inline static std::set<Job>                      sJobs             {};
 
-  // obsolete -> make constexpr hash map, maybe xor will do..
-  // try reverse range AND monoid
   template<typename C, bool AsLogicalIndex>
   requires std::is_base_of_v<IComponent, C>
   inline static std::uint64_t Type2Index() noexcept
@@ -93,34 +92,9 @@ namespace ACS
     else                          return typeIt->second.mMaskBit;
   }
 
-  inline constexpr static std::uint64_t                 csTypeDistinctCount{};
-  inline constexpr static std::uint64_t                 csTypeMask{};
-  inline constexpr static std::array<std::uint64_t, 64> csTypeHashMap{};
-
-  template<std::uint64_t Limit, typename ... C>
-  requires (std::is_base_of_v<IComponent, C>, ...)
-  inline constexpr std::uint64_t Types2MaskXor()
-  {
-    return (typeid(C).hash_code() | ... | 0) % Limit;
-  }
-
-  template<typename C>
-  requires std::is_base_of_v<IComponent, C>
-  inline constexpr std::uint64_t Component2Flag() noexcept
-  {
-    std::uint64_t const maskBit{ Types2MaskXor<64, C>() };
-
-    return 0;
-  }
-
-  inline constexpr std::uint64_t Mask2Component(std::uint64_t mask) noexcept
-  {
-    return 0;
-  }
-
   template<typename A>
   requires std::is_base_of_v<IActor, A>
-  inline static A *         CreateActor(std::string const & actorName) noexcept
+  inline static A *           CreateActor(std::string const & actorName) noexcept
   {
     Actor actor
     {
@@ -137,7 +111,7 @@ namespace ACS
 
   template<typename C, typename ... Args>
   requires std::is_base_of_v<IComponent, C>
-  inline static C *         GetOrAttach(std::string const & actorName, Args && ... args) noexcept
+  inline static C *           GetOrAttachComponent(std::string const & actorName, Args && ... args) noexcept
   {
     auto const actorIt{ sActors.find(actorName) };
     if (actorIt == sActors.end()) return nullptr;
@@ -158,42 +132,56 @@ namespace ACS
 
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
-  inline static S *         Register(Args && ... args) noexcept
+  inline static S *           RegisterSystem(Args && ... args) noexcept
   {
     auto const [sysemIt, _] { sSystems.emplace(typeid(S).hash_code(), new S{ std::forward<Args>(args) ... }) };
     return reinterpret_cast<S *>(sysemIt->second);
   }
 
+  // maybe parallelize?
   template<typename S, typename ... Args>
   requires std::is_base_of_v<ISystem, S>
-  inline static void        UpdateSystem(Args && ... args) noexcept
+  inline static void          UpdateSystem(Args && ... args) noexcept
   {
     for (const auto & [hash, pSystem] : sSystems)
       (* reinterpret_cast<S *>(pSystem))(std::forward<Args>(args) ...);
   }
 
-  // maybe parallelize?
-  // build queuing system..
   template<typename S, typename ... Components>
-  requires std::is_base_of_v<ISystem, S> && (std::is_base_of_v<IComponent, typename Identity<Components>::Type>, ...)
-  inline static void        SubmitJob(void(* pFunction)(S *, typename Identity<Components>::Pointer...)) noexcept
+  requires std::is_base_of_v<ISystem, S> && (std::is_base_of_v<IComponent, Components> && ...)
+  inline static void          SubmitJob(S * pInstance) noexcept
   {
     Job job
     {
       (Type2Index<typename Identity<Components>::Type, false>() | ... | 0),
-      pFunction
+      pInstance,
     };
 
     sJobs.insert(job);
   }
 
-  inline static void        Dispatch() noexcept
+  template<typename Tuple, std::size_t ... Ints>
+  inline static std::tuple<std::tuple_element_t<Ints, Tuple> ...> SelectFromTuple(Tuple && tuple, std::index_sequence<Ints ...>)
+  {
+    return { std::get<Ints>(std::forward<Tuple>(tuple)) ... };
+  }
+
+  // maybe parallelize?
+  // requires clause
+  template<typename ... Systems>
+  requires (std::is_base_of_v<ISystem, Systems> && ...)
+  inline static void          DispatchSystems() noexcept
   {
     for (auto const & [name, actor] : sActors)
+    {
       for (auto const & job : sJobs)
       {
         if (job.mMask == actor.mMask)
         {
+          std::tuple<ISystem * ...> tuple{ (reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance), ...) };
+
+          //std::apply();
+
           //predicate
           //(
           //  reinterpret_cast<typename Identity<Components>::Pointer>
@@ -221,6 +209,7 @@ namespace ACS
         //  //MEASURE_END(Predicate);
         //}
       }
+    }
   }
 
 }

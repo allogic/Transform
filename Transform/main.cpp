@@ -17,47 +17,29 @@ struct Sandbox
 
   bool OnUserCreate() override
   {
-    ACS::Register<BlockManager>(this);
-    ACS::Register<BlockAI>();
-    ACS::Register<BlockDynamicRenderer>(this);
+    ACS::RegisterSystem<BlockManager>(this);
+    ACS::RegisterSystem<BlockAI>();
+    ACS::RegisterSystem<BlockDynamicRenderer>(this);
 
-    char mask{};
-
-    mask |= (1 << 3);
-    mask |= (1 << 2);
-    mask |= (1 << 1);
-    mask |= (1 << 0);
-
-    std::cout << std::bitset<8>(mask) << std::endl;
-
-    //mask -= 8;
-
-    //std::cout << std::bitset<8>(mask) << std::endl;
-
-    for (unsigned int i{ 8 }; i > 0; i >>= 1)
-    {
-      std::cout << std::bitset<8>(i) << std::endl;
-    }
-
-    return false;
+    return true;
   }
   bool OnUserUpdate(float elapsedTime) override
   {
-    // submit update instructions
+    MEASURE_BEGIN(BlockManager);
+    ACS::UpdateSystem<BlockManager>(elapsedTime);
+    MEASURE_END(BlockManager);
+    
+    MEASURE_BEGIN(BlockAI);
+    ACS::UpdateSystem<BlockAI>(elapsedTime);
+    MEASURE_END(BlockAI);
 
-    //MEASURE_BEGIN(BlockManager);
-    //ACS::Update<BlockManager>(elapsedTime);
-    //MEASURE_END(BlockManager);
-    //
-    //MEASURE_BEGIN(BlockBehaviour);
-    //ACS::Update<BlockBehaviour>(elapsedTime);
-    //MEASURE_END(BlockBehaviour);
+    MEASURE_BEGIN(BlockDynamicRenderer);
+    ACS::UpdateSystem<BlockDynamicRenderer>(elapsedTime);
+    MEASURE_END(BlockDynamicRenderer);
 
-    //MEASURE_BEGIN(BlockDynamicRenderer);
-    //ACS::UpdateSystem<BlockDynamicRenderer>(elapsedTime);
-    //MEASURE_END(BlockDynamicRenderer);
-
-    // execute update instructions
+    MEASURE_BEGIN(DispatchSystems);
+    ACS::DispatchSystems<BlockManager, BlockAI, BlockDynamicRenderer>();
+    MEASURE_END(DispatchSystems);
 
     return true;
   }
