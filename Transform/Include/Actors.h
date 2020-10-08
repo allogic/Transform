@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ACS.h>
+#include <Common.h>
 
 #include <string>
 
-struct MyActor : ACS::IActor
+struct MyActor : IActor
 {
   MyActor(std::string const & actorName)
     : IActor(actorName) {}

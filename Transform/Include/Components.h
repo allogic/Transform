@@ -1,24 +1,24 @@
 #pragma once
 
-#include <ACS.h>
+#include <Common.h>
 
 #include <olcPixelGameEngine.h>
 
 #include <string>
 
-struct Transform : ACS::IComponent
+struct Transform : IComponent
 {
   olc::vi2d mPosition{};
   float     mRotation{};
   olc::vi2d mScale   {};
 };
 
-struct Camera : ACS::IComponent
+struct Camera : IComponent
 {
 
 };
 
-struct Decal : ACS::IComponent
+struct Decal : IComponent
 {
   // use std::optional for non default init mem
   olc::Decal mDecal;
@@ -27,18 +27,18 @@ struct Decal : ACS::IComponent
     : mDecal{ pSprite } {}
 };
 
-struct Material : ACS::IComponent
+struct Material : IComponent
 {
   
 };
 
-struct IBlockStatic : ACS::IComponent
+struct IBlockStatic : IComponent
 {
   olc::vi2d mPosition{};
   olc::vi2d mSize    {};
 };
 
-struct IBlockDynamic : ACS::IComponent
+struct IBlockDynamic : IComponent
 {
   olc::vi2d mPosition{};
   olc::vi2d mSize    {};

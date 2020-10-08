@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Common.h>
 #include <ACS.h>
 #include <Components.h>
 
@@ -7,7 +8,7 @@
 
 #include <random>
 
-struct BlockManager : ACS::ISystem
+struct BlockManager : ISystem
 {
   olc::PixelGameEngine * mpEngine{};
   olc::Sprite            mSpriteDirt{ 16, 16 };
@@ -37,7 +38,7 @@ struct BlockManager : ACS::ISystem
   }
 };
 
-struct BlockAI : ACS::ISystem
+struct BlockAI : ISystem
 {
   void operator () (float elapsedTime) override
   {
@@ -48,7 +49,7 @@ struct BlockAI : ACS::ISystem
 // remove static block handler since it's no longer
 // part of the component system
 
-struct BlockDynamicRenderer : ACS::ISystem
+struct BlockDynamicRenderer : ISystem
 {
   olc::PixelGameEngine * mpEngine{};
 

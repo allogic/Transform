@@ -1,8 +1,4 @@
-#include <ACS.h>
-#include <Actors.h>
-#include <Components.h>
-#include <Systems.h>
-#include <Debug.h>
+#include <Transform.h>
 
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
@@ -38,7 +34,11 @@ struct Sandbox
     MEASURE_END(BlockDynamicRenderer);
 
     MEASURE_BEGIN(DispatchSystems);
-    ACS::DispatchSystems<BlockManager, BlockAI, BlockDynamicRenderer>();
+    ACS::DispatchSystems<
+      BlockManager,
+      BlockAI,
+      BlockDynamicRenderer
+    >();
     MEASURE_END(DispatchSystems);
 
     return true;

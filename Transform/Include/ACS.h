@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Debug.h>
+#include <Common.h>
 
 #include <utility>
 #include <map>
@@ -13,46 +14,29 @@
 #include <functional>
 #include <utility>
 
-//#pragma warning(disable : 4834)
-
 namespace ACS
 {
-  struct IComponent
-  {
-
-  };
-  struct ISystem
-  {
-    virtual void operator () (float elapsedTime) = 0;
-  };
-  struct IActor
-  {
-    std::string mActorName{};
-
-    IActor(std::string const & actorName)
-      : mActorName{ actorName } {}
-  };
-
   template<typename C>
   requires std::is_base_of_v<IComponent, C>
-  struct Identity
+  struct [[nodiscard("Internal type")]] Identity
   {
-    using Type    = C;
-    using Pointer = C*;
+    using Type     = C;
+    using Pointer  = C *;
+    using CPointer = C const *;
   };
 
-  struct Actor
+  struct [[nodiscard("Internal type")]] Actor
   {
     IActor *      mpActor     {};
     std::uint64_t mMask       {};
     void * *      mppRegisters{};
   };
-  struct Key
+  struct [[nodiscard("Internal type")]] Key
   {
     char          mLogicalIndex{};
     std::uint64_t mMaskBit     {};
   };
-  struct Job
+  struct [[nodiscard("Internal type")]] Job
   {
     std::uint64_t mMask     {};
     void *        mpInstance{};
@@ -166,19 +150,26 @@ namespace ACS
     return { std::get<Ints>(std::forward<Tuple>(tuple)) ... };
   }
 
+  template<typename System>
+  //requires (std::is_base_of_v<ISystem, Systems> && ...)
+  inline static System * UnpackSystemPointer(Job const& job)
+  {
+    return reinterpret_cast<System *>(job.mpInstance);
+  }
+
   // maybe parallelize?
-  // requires clause
   template<typename ... Systems>
   requires (std::is_base_of_v<ISystem, Systems> && ...)
   inline static void          DispatchSystems() noexcept
   {
     for (auto const & [name, actor] : sActors)
     {
+      // only apply jobs which match system mask
       for (auto const & job : sJobs)
       {
         if (job.mMask == actor.mMask)
         {
-          std::tuple<ISystem * ...> tuple{ (reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance), ...) };
+          std::tuple<typename Identity<Systems>::Pointer ...> tuple{ UnpackSystemPointer<typename Identity<Systems>::Type>(job) ... };
 
           //std::apply();
 

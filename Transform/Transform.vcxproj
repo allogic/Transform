@@ -388,9 +388,11 @@
     <ClInclude Include="glm\vector_relational.hpp" />
     <ClInclude Include="Include\ACS.h" />
     <ClInclude Include="Include\Actors.h" />
+    <ClInclude Include="Include\Common.h" />
     <ClInclude Include="Include\Components.h" />
     <ClInclude Include="Include\Debug.h" />
     <ClInclude Include="Include\Systems.h" />
+    <ClInclude Include="Include\Transform.h" />
     <ClInclude Include="olcPixelGameEngine.h" />
   </ItemGroup>
   <ItemGroup>
