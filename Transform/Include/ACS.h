@@ -12,6 +12,9 @@
 #include <concepts>
 #include <cstdint>
 #include <utility>
+#include <bitset>
+
+#include <olcPixelGameEngine.h>
 
 namespace ACS
 {
@@ -112,12 +115,13 @@ namespace ACS
     return reinterpret_cast<C *>(actor.mppRegisters[logicalIndex]);
   }
 
-  template<typename S, typename ... Args>
-  requires std::is_base_of_v<ISystem, S>
-  inline static S *           RegisterSystem(Args && ... args) noexcept
+  template<typename ... Systems>
+  requires (std::is_base_of_v<ISystem, Systems> && ...)
+  inline static void          RegisterSystem(olc::PixelGameEngine * pEngine) noexcept
   {
-    auto const [sysemIt, _] { sSystems.emplace(typeid(S).hash_code(), new S{ std::forward<Args>(args) ... }) };
-    return reinterpret_cast<S *>(sysemIt->second);
+    (
+      (sSystems.emplace(typeid(typename Identity<Systems>::Type).hash_code(), new typename Identity<Systems>::Type{ pEngine }))
+    , ...);
   }
 
   // maybe parallelize?
@@ -125,10 +129,10 @@ namespace ACS
   requires (std::is_base_of_v<ISystem, Systems> && ...)
   inline static void          UpdateSystems(float elapsedTime) noexcept
   {
-    for (const auto& [hash, pSystem] : sSystems)
+    for (const auto & [hash, pSystem] : sSystems)
     {
       (
-        ((*reinterpret_cast<typename Identity<Systems>::Pointer>(pSystem))(elapsedTime)) // call
+        ((* reinterpret_cast<typename Identity<Systems>::Pointer>(pSystem))(elapsedTime)) // call
       , ...);
     }
   }
@@ -140,6 +144,7 @@ namespace ACS
     Job job
     {
       (Type2Index<typename Identity<Components>::Type, false>() | ... | 0),
+      // also add component instance pointers?
       pInstance,
     };
 
@@ -159,6 +164,29 @@ namespace ACS
         if (job.mMask == actor.mMask)
         {
           // decode components from registers!
+
+          // static approach
+          if (job.mMask & Type2Index<BlockResource, false>())
+          {
+            BlockResource * pBlockResource{ reinterpret_cast<BlockResource *>(actor.mpRegisters[Type2Index<BlockResource, true>()]) };
+          }
+          
+          if (job.mMask & Type2Index<Decal, false>())
+          {
+            Decal * pDecal{ reinterpret_cast<Decal *>(actor.mpRegisters[Type2Index<Decal, true>()]) };
+          }
+
+          // dynamic approach
+          //for (std::uint8_t i{ 128 }; i > 0; i >>= 1)
+          //{
+          //  std::cout << std::bitset<8>(i) << std::endl;
+          //
+          //  if (job.mMask & i) // found active component
+          //  {
+          //
+          //  }
+          //}
+
           (
             ((* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))(reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))) // call
           , ...);

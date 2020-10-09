@@ -6,7 +6,7 @@
 
 #include <olcPixelGameEngine.h>
 
-#include <random>
+// remove constructors use call operator with ctx instead
 
 struct BlockManager : ISystem
 {
@@ -36,7 +36,6 @@ struct BlockManager : ISystem
   {
 
   }
-
   void operator () (BlockManager * pBlockManager)
   {
 
@@ -45,14 +44,18 @@ struct BlockManager : ISystem
 
 struct BlockAI : ISystem
 {
+  olc::PixelGameEngine * mpEngine{};
+
+  BlockAI(olc::PixelGameEngine * pEngine)
+    : mpEngine{ pEngine } {}
+
   void operator () (float elapsedTime) override
   {
-    
+    ACS::SubmitJob<BlockAI, Transform>(this);
   }
-
   void operator () (BlockAI * pBlockAi)
   {
-
+    
   }
 };
 
@@ -70,7 +73,6 @@ struct BlockDynamicRenderer : ISystem
   {
     ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(this);
   }
-
   // maybe call templated operator and properly forward actors arguments
   void operator () (BlockDynamicRenderer * pDynamicRenderer)
   {

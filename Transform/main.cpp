@@ -13,9 +13,11 @@ struct Sandbox
 
   bool OnUserCreate() override
   {
-    ACS::RegisterSystem<BlockManager>(this);
-    ACS::RegisterSystem<BlockAI>();
-    ACS::RegisterSystem<BlockDynamicRenderer>(this);
+    ACS::RegisterSystem<
+      BlockManager,
+      BlockAI,
+      BlockDynamicRenderer
+    >(this);
 
     return true;
   }
