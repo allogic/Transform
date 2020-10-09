@@ -21,17 +21,13 @@ struct Sandbox
   }
   bool OnUserUpdate(float elapsedTime) override
   {
-    MEASURE_BEGIN(BlockManager);
-    ACS::UpdateSystem<BlockManager>(elapsedTime);
-    MEASURE_END(BlockManager);
-    
-    MEASURE_BEGIN(BlockAI);
-    ACS::UpdateSystem<BlockAI>(elapsedTime);
-    MEASURE_END(BlockAI);
-
-    MEASURE_BEGIN(BlockDynamicRenderer);
-    ACS::UpdateSystem<BlockDynamicRenderer>(elapsedTime);
-    MEASURE_END(BlockDynamicRenderer);
+    MEASURE_BEGIN(UpdateSystems);
+    ACS::UpdateSystems<
+      BlockManager,
+      BlockAI,
+      BlockDynamicRenderer
+    >(elapsedTime);
+    MEASURE_END(UpdateSystems);
 
     MEASURE_BEGIN(DispatchSystems);
     ACS::DispatchSystems<

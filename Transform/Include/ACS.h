@@ -11,18 +11,16 @@
 #include <string>
 #include <concepts>
 #include <cstdint>
-#include <functional>
 #include <utility>
 
 namespace ACS
 {
-  template<typename C>
-  requires std::is_base_of_v<IComponent, C>
+  template<typename T>
   struct [[nodiscard("Internal type")]] Identity
   {
-    using Type     = C;
-    using Pointer  = C *;
-    using CPointer = C const *;
+    using Type     = T;
+    using Pointer  = T *;
+    using CPointer = T const *;
   };
 
   struct [[nodiscard("Internal type")]] Actor
@@ -41,14 +39,14 @@ namespace ACS
     std::uint64_t mMask     {};
     void *        mpInstance{};
 
-    inline bool operator < (Job const & job) const noexcept { return mMask < job.mMask; }
+    inline bool operator () (Job const & lhs, Job const & rhs) const noexcept { return rhs.mpInstance < lhs.mpInstance; }
   };
 
   inline static std::uint64_t                      sDistinctTypeCount{};
   inline static std::map<std::uint64_t, Key>       sTypeRegistry     {};
   inline static std::map<std::string, Actor>       sActors           {};
   inline static std::map<std::uint64_t, ISystem *> sSystems          {};
-  inline static std::set<Job>                      sJobs             {};
+  inline static std::set<Job, Job>                 sJobs             {};
 
   template<typename C, bool AsLogicalIndex>
   requires std::is_base_of_v<IComponent, C>
@@ -123,12 +121,16 @@ namespace ACS
   }
 
   // maybe parallelize?
-  template<typename S, typename ... Args>
-  requires std::is_base_of_v<ISystem, S>
-  inline static void          UpdateSystem(Args && ... args) noexcept
+  template<typename ... Systems>
+  requires (std::is_base_of_v<ISystem, Systems> && ...)
+  inline static void          UpdateSystems(float elapsedTime) noexcept
   {
-    for (const auto & [hash, pSystem] : sSystems)
-      (* reinterpret_cast<S *>(pSystem))(std::forward<Args>(args) ...);
+    for (const auto& [hash, pSystem] : sSystems)
+    {
+      (
+        ((*reinterpret_cast<typename Identity<Systems>::Pointer>(pSystem))(elapsedTime)) // call
+      , ...);
+    }
   }
 
   template<typename S, typename ... Components>
@@ -144,19 +146,6 @@ namespace ACS
     sJobs.insert(job);
   }
 
-  template<typename Tuple, std::size_t ... Ints>
-  inline static std::tuple<std::tuple_element_t<Ints, Tuple> ...> SelectFromTuple(Tuple && tuple, std::index_sequence<Ints ...>)
-  {
-    return { std::get<Ints>(std::forward<Tuple>(tuple)) ... };
-  }
-
-  template<typename System>
-  //requires (std::is_base_of_v<ISystem, Systems> && ...)
-  inline static System * UnpackSystemPointer(Job const& job)
-  {
-    return reinterpret_cast<System *>(job.mpInstance);
-  }
-
   // maybe parallelize?
   template<typename ... Systems>
   requires (std::is_base_of_v<ISystem, Systems> && ...)
@@ -169,38 +158,12 @@ namespace ACS
       {
         if (job.mMask == actor.mMask)
         {
-          std::tuple<typename Identity<Systems>::Pointer ...> tuple{ UnpackSystemPointer<typename Identity<Systems>::Type>(job) ... };
-
-          //std::apply();
-
-          //predicate
-          //(
-          //  reinterpret_cast<typename Identity<Components>::Pointer>
-          //  (
-          //    actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
-          //  ) ...
-          //);
+          // decode components from registers!
+          (
+            ((* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))(reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))) // call
+          , ...);
         }
-
-
-        //MEASURE_BEGIN(CalcMask);
-        //std::uint64_t const mask{ (Type2Index<typename Identity<Components>::Type, false>() | ... | 0) };
-        //MEASURE_END(CalcMask);
-
-        //if (actor.mMask & mask)
-        //{
-        //  //MEASURE_BEGIN(Predicate);
-        //  //predicate
-        //  //(
-        //  //  reinterpret_cast<typename Identity<Components>::Pointer>
-        //  //  (
-        //  //    actor.mppRegisters[Type2Index<typename Identity<Components>::Type, true>()]
-        //  //  ) ...
-        //  //);
-        //  //MEASURE_END(Predicate);
-        //}
       }
     }
   }
-
 }

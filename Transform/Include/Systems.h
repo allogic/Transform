@@ -36,6 +36,11 @@ struct BlockManager : ISystem
   {
 
   }
+
+  void operator () (BlockManager * pBlockManager)
+  {
+
+  }
 };
 
 struct BlockAI : ISystem
@@ -43,6 +48,11 @@ struct BlockAI : ISystem
   void operator () (float elapsedTime) override
   {
     
+  }
+
+  void operator () (BlockAI * pBlockAi)
+  {
+
   }
 };
 
@@ -61,8 +71,14 @@ struct BlockDynamicRenderer : ISystem
     ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(this);
   }
 
-  void operator () (BlockDynamicRenderer * pDynamicRenderer, BlockResource * pBlockResource, Decal * pDecal)
+  // maybe call templated operator and properly forward actors arguments
+  void operator () (BlockDynamicRenderer * pDynamicRenderer)
   {
-    pDynamicRenderer->mpEngine->DrawDecal(pBlockResource->mPosition, &pDecal->mDecal, pBlockResource->mSize);
+    //pDynamicRenderer->mpEngine->DrawDecal
+    //(
+    //  pDynamicRenderer->pBlockResource->mPosition,
+    //  & pDecal->mDecal,
+    //  pBlockResource->mSize
+    //);
   }
 };
