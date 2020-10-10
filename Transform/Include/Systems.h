@@ -24,7 +24,7 @@ struct BlockManager : ISystem
         std::string const actorName{ "actor_" + std::to_string(i) + "_" + std::to_string(j) };
 
         auto pActor{ ACS::CreateActor<MyActor>(actorName) };
-        auto pBlockResource{ ACS::GetOrAttachComponent<BlockResource>(actorName) };
+        auto pBlockResource{ ACS::GetOrAttachComponent<BlockDynamic>(actorName) };
         auto pDecal{ ACS::GetOrAttachComponent<Decal>(actorName, & mSpriteDirt) };
 
         pBlockResource->mPosition = olc::vi2d{ (int)i * 16, (int)j * 16 };
@@ -36,9 +36,9 @@ struct BlockManager : ISystem
   {
 
   }
-  void operator () (BlockManager * pBlockManager)
+  void operator () (BlockManager * pBlockManager, void * * ppRegisters)
   {
-
+    std::cout << typeid(this).name() << std::endl;
   }
 };
 
@@ -53,9 +53,9 @@ struct BlockAI : ISystem
   {
     ACS::SubmitJob<BlockAI, Transform>(this);
   }
-  void operator () (BlockAI * pBlockAi)
+  void operator () (BlockAI * pBlockAi, void * * ppRegisters)
   {
-    
+    std::cout << typeid(this).name() << std::endl;
   }
 };
 
@@ -71,11 +71,13 @@ struct BlockDynamicRenderer : ISystem
 
   void operator () (float elapsedTime) override
   {
-    ACS::SubmitJob<BlockDynamicRenderer, BlockResource, Decal>(this);
+    ACS::SubmitJob<BlockDynamicRenderer, BlockDynamic, Decal>(this);
   }
   // maybe call templated operator and properly forward actors arguments
-  void operator () (BlockDynamicRenderer * pDynamicRenderer)
+  void operator () (BlockDynamicRenderer * pDynamicRenderer, void * * ppRegisters)
   {
+    std::cout << typeid(this).name() << std::endl;
+
     //pDynamicRenderer->mpEngine->DrawDecal
     //(
     //  pDynamicRenderer->pBlockResource->mPosition,

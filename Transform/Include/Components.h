@@ -6,17 +6,23 @@
 
 #include <string>
 
+#ifndef ACS_EXCLUDE
+#include <ACS.h>
+#endif
+
 struct Transform : IComponent
 {
   olc::vi2d mPosition{};
   float     mRotation{};
   olc::vi2d mScale   {};
 };
+using Component0 = Transform;
 
 struct Camera : IComponent
 {
 
 };
+using Component1 = Camera;
 
 struct Decal : IComponent
 {
@@ -26,37 +32,25 @@ struct Decal : IComponent
   Decal(olc::Sprite * pSprite)
     : mDecal{ pSprite } {}
 };
+using Component2 = Decal;
 
 struct Material : IComponent
 {
   
 };
+using Component3 = Material;
 
-struct IBlockStatic : IComponent
+struct BlockStatic : IComponent
 {
   olc::vi2d mPosition{};
   olc::vi2d mSize    {};
 };
+using Component4 = BlockStatic;
 
-struct IBlockDynamic : IComponent
+struct BlockDynamic : IComponent
 {
   olc::vi2d mPosition{};
   olc::vi2d mSize    {};
   olc::vf2d mVelocity{};
 };
-
-enum struct BlockStaticTypes : unsigned char
-{
-  Resource,
-};
-
-enum struct BlockDynamicTypes : unsigned char
-{
-  Something,
-};
-
-struct BlockResource : IBlockStatic
-{
-  float             mSpawnRate{};
-  BlockDynamicTypes mBlockType{};
-};
+using Component5 = BlockDynamic;

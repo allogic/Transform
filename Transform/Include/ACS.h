@@ -3,6 +3,10 @@
 #include <Debug.h>
 #include <Common.h>
 
+#define ACS_EXCLUDE
+#include <Components.h>
+#undef ACS_EXCLUDE
+
 #include <utility>
 #include <map>
 #include <set>
@@ -16,6 +20,8 @@
 
 #include <olcPixelGameEngine.h>
 
+// properly implement std::uint_t
+
 namespace ACS
 {
   template<typename T>
@@ -28,24 +34,29 @@ namespace ACS
 
   struct [[nodiscard("Internal type")]] Actor
   {
-    IActor *      mpActor     {};
-    std::uint64_t mMask       {};
-    void * *      mppRegisters{};
+    IActor *     mpActor     {};
+    std::uint8_t mMask       {};
+    void * *     mppRegisters{};
   };
   struct [[nodiscard("Internal type")]] Key
   {
-    char          mLogicalIndex{};
-    std::uint64_t mMaskBit     {};
+    std::uint8_t mLogicalIndex{};
+    std::uint8_t mMaskBit     {};
   };
   struct [[nodiscard("Internal type")]] Job
   {
-    std::uint64_t mMask     {};
-    void *        mpInstance{};
+    std::uint8_t mMask     {};
+    void *       mpInstance{};
+    std::uint8_t mNumArgs  {};
 
-    inline bool operator () (Job const & lhs, Job const & rhs) const noexcept { return rhs.mpInstance < lhs.mpInstance; }
+    inline bool operator () (Job const & lhs, Job const & rhs) const noexcept
+    {
+      // extend comparison
+      return rhs.mpInstance < lhs.mpInstance;
+    }
   };
 
-  inline static std::uint64_t                      sDistinctTypeCount{};
+  inline static std::uint8_t                       sDistinctTypeCount{};
   inline static std::map<std::uint64_t, Key>       sTypeRegistry     {};
   inline static std::map<std::string, Actor>       sActors           {};
   inline static std::map<std::uint64_t, ISystem *> sSystems          {};
@@ -53,7 +64,7 @@ namespace ACS
 
   template<typename C, bool AsLogicalIndex>
   requires std::is_base_of_v<IComponent, C>
-  inline static std::uint64_t Type2Index() noexcept
+  inline static std::uint8_t  Type2Index() noexcept
   {
     auto const typeIt{ sTypeRegistry.find(typeid(C).hash_code()) };
 
@@ -61,8 +72,8 @@ namespace ACS
     {
       Key key
       {
-        .mLogicalIndex{ static_cast<char>(sDistinctTypeCount) },
-        .mMaskBit     { static_cast<std::uint64_t>(1) << sDistinctTypeCount },
+        .mLogicalIndex{ sDistinctTypeCount },
+        .mMaskBit     { static_cast<std::uint8_t>(1 << sDistinctTypeCount) },
       };
 
       sDistinctTypeCount++;
@@ -103,8 +114,8 @@ namespace ACS
 
     Actor & actor{ actorIt->second };
 
-    std::uint64_t const logicalIndex{ Type2Index<C, true>() };
-    std::uint64_t const maskBit{ Type2Index<C, false>() };
+    std::uint8_t const logicalIndex{ Type2Index<C, true>() };
+    std::uint8_t const maskBit{ Type2Index<C, false>() };
 
     if (! (actor.mMask & maskBit))
     {
@@ -117,7 +128,7 @@ namespace ACS
 
   template<typename ... Systems>
   requires (std::is_base_of_v<ISystem, Systems> && ...)
-  inline static void          RegisterSystem(olc::PixelGameEngine * pEngine) noexcept
+  inline static void          RegisterSystems(olc::PixelGameEngine * pEngine) noexcept
   {
     (
       (sSystems.emplace(typeid(typename Identity<Systems>::Type).hash_code(), new typename Identity<Systems>::Type{ pEngine }))
@@ -132,7 +143,7 @@ namespace ACS
     for (const auto & [hash, pSystem] : sSystems)
     {
       (
-        ((* reinterpret_cast<typename Identity<Systems>::Pointer>(pSystem))(elapsedTime)) // call
+        ((* reinterpret_cast<typename Identity<Systems>::Pointer>(pSystem))(elapsedTime))
       , ...);
     }
   }
@@ -143,9 +154,9 @@ namespace ACS
   {
     Job job
     {
-      (Type2Index<typename Identity<Components>::Type, false>() | ... | 0),
-      // also add component instance pointers?
-      pInstance,
+      .mMask     { (Type2Index<typename Identity<Components>::Type, false>() | ... | 0u) },
+      .mpInstance{ pInstance },
+      .mNumArgs  { sizeof ... (Components) },
     };
 
     sJobs.insert(job);
@@ -158,39 +169,50 @@ namespace ACS
   {
     for (auto const & [name, actor] : sActors)
     {
-      // only apply jobs which match system mask
       for (auto const & job : sJobs)
       {
-        if (job.mMask == actor.mMask)
-        {
-          // decode components from registers!
-
-          // static approach
-          if (job.mMask & Type2Index<BlockResource, false>())
-          {
-            BlockResource * pBlockResource{ reinterpret_cast<BlockResource *>(actor.mpRegisters[Type2Index<BlockResource, true>()]) };
-          }
-          
-          if (job.mMask & Type2Index<Decal, false>())
-          {
-            Decal * pDecal{ reinterpret_cast<Decal *>(actor.mpRegisters[Type2Index<Decal, true>()]) };
-          }
-
-          // dynamic approach
-          //for (std::uint8_t i{ 128 }; i > 0; i >>= 1)
-          //{
-          //  std::cout << std::bitset<8>(i) << std::endl;
-          //
-          //  if (job.mMask & i) // found active component
-          //  {
-          //
-          //  }
-          //}
-
+        (
           (
-            ((* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))(reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))) // call
-          , ...);
-        }
+            (job.mMask == actor.mMask)
+              ? (* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))(reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance), actor.mppRegisters)
+              : void()
+          )
+        , ...);
+
+        // fold here.. ?
+
+        // build args tuple
+        //for (std::uint8_t i{ 1 }; i < job.mNumArgs; i++)
+        //{
+        //  if (job.mMask & (1 << i)) Component0 * pTransform{ reinterpret_cast<Component0 *>(actor.mppRegisters[i]) };
+        //}
+        //
+        //Component2 * pDecal{ reinterpret_cast<Component2 *>(actor.mppRegisters[0]) };
+        //Component5 * pBlockDynamic{ reinterpret_cast<Component5 *>(actor.mppRegisters[1]) };
+
+        // decode components from registers!
+
+        // static approach
+        //if (job.mMask & Type2Index<BlockResource, false>())
+        //{
+        //  BlockResource * pBlockResource{ reinterpret_cast<BlockResource *>(actor.mpRegisters[Type2Index<BlockResource, true>()]) };
+        //}
+        //
+        //if (job.mMask & Type2Index<Decal, false>())
+        //{
+        //  Decal * pDecal{ reinterpret_cast<Decal *>(actor.mpRegisters[Type2Index<Decal, true>()]) };
+        //}
+
+        // dynamic approach
+        //for (std::uint8_t i{ 128 }; i > 0; i >>= 1)
+        //{
+        //  std::cout << std::bitset<8>(i) << std::endl;
+        //
+        //  if (job.mMask & i) // found active component
+        //  {
+        //
+        //  }
+        //}
       }
     }
   }

@@ -1,10 +1,11 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 struct IComponent
 {
-
+  
 };
 struct ISystem
 {
@@ -12,7 +13,7 @@ struct ISystem
 };
 struct IActor
 {
-  std::string mActorName{};
+  std::string const mActorName{};
 
   IActor(std::string const& actorName)
     : mActorName{ actorName } {}
