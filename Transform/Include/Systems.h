@@ -6,8 +6,6 @@
 
 #include <olcPixelGameEngine.h>
 
-// remove constructors use call operator with ctx instead
-
 struct BlockManager : ISystem
 {
   olc::PixelGameEngine * mpEngine{};
@@ -23,9 +21,9 @@ struct BlockManager : ISystem
       {
         std::string const actorName{ "actor_" + std::to_string(i) + "_" + std::to_string(j) };
 
-        auto pActor{ ACS::CreateActor<MyActor>(actorName) };
-        auto pBlockResource{ ACS::GetOrAttachComponent<BlockDynamic>(actorName) };
-        auto pDecal{ ACS::GetOrAttachComponent<Decal>(actorName, & mSpriteDirt) };
+        auto pActor{ ACS::GetOrCreateActor<MyActor>(actorName) };
+        auto pBlockResource{ ACS::GetOrCreateComponent<BlockDynamic>(actorName) };
+        auto pDecal{ ACS::GetOrCreateComponent<Decal>(actorName, & mSpriteDirt) };
 
         pBlockResource->mPosition = olc::vi2d{ (int)i * 16, (int)j * 16 };
         pBlockResource->mSize = olc::vi2d{ 1, 1 };
@@ -36,7 +34,7 @@ struct BlockManager : ISystem
   {
 
   }
-  void operator () (BlockManager * pBlockManager, void * * ppRegisters)
+  void operator () ()
   {
     std::cout << typeid(this).name() << std::endl;
   }
@@ -51,16 +49,16 @@ struct BlockAI : ISystem
 
   void operator () (float elapsedTime) override
   {
-    ACS::SubmitJob<BlockAI, Transform>(this);
+    //ACS::SubmitJob<
+    //  BlockAI,
+    //  Transform
+    //>(this);
   }
-  void operator () (BlockAI * pBlockAi, void * * ppRegisters)
+  void operator () ()
   {
     std::cout << typeid(this).name() << std::endl;
   }
 };
-
-// remove static block handler since it's no longer
-// part of the component system
 
 struct BlockDynamicRenderer : ISystem
 {
@@ -71,12 +69,15 @@ struct BlockDynamicRenderer : ISystem
 
   void operator () (float elapsedTime) override
   {
-    ACS::SubmitJob<BlockDynamicRenderer, BlockDynamic, Decal>(this);
+    ACS::SubmitJob<
+      BlockDynamicRenderer,
+      BlockDynamic,
+      Decal
+    >(this);
   }
-  // maybe call templated operator and properly forward actors arguments
-  void operator () (BlockDynamicRenderer * pDynamicRenderer, void * * ppRegisters)
+  void operator () ()
   {
-    std::cout << typeid(this).name() << std::endl;
+    //std::cout << typeid(this).name() << std::endl;
 
     //pDynamicRenderer->mpEngine->DrawDecal
     //(

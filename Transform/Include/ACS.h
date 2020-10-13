@@ -20,8 +20,6 @@
 
 #include <olcPixelGameEngine.h>
 
-// properly implement std::uint_t
-
 namespace ACS
 {
   template<typename T>
@@ -32,7 +30,7 @@ namespace ACS
     using CPointer = T const *;
   };
 
-  struct [[nodiscard("Internal type")]] Actor
+  struct [[nodiscard("Internal type")]] AMR
   {
     IActor *     mpActor     {};
     std::uint8_t mMask       {};
@@ -45,85 +43,109 @@ namespace ACS
   };
   struct [[nodiscard("Internal type")]] Job
   {
-    std::uint8_t mMask     {};
-    void *       mpInstance{};
-    std::uint8_t mNumArgs  {};
+    std::uint8_t           mMask     {};
+    std::type_info const * mpArgsInfo{};
+    void *                 mpSystem  {};
+    std::uint8_t           mNumArgs  {};
 
     inline bool operator () (Job const & lhs, Job const & rhs) const noexcept
     {
       // extend comparison
-      return rhs.mpInstance < lhs.mpInstance;
+      return rhs.mpSystem < lhs.mpSystem;
     }
   };
 
-  inline static std::uint8_t                       sDistinctTypeCount{};
-  inline static std::map<std::uint64_t, Key>       sTypeRegistry     {};
-  inline static std::map<std::string, Actor>       sActors           {};
-  inline static std::map<std::uint64_t, ISystem *> sSystems          {};
-  inline static std::set<Job, Job>                 sJobs             {};
+  inline static std::uint8_t                                    sDistinctComponentCount{};
+  inline static std::map<std::uint64_t, Key>                    sComponentRegistry     {};
+  inline static std::map<std::uint64_t, std::type_info const *> sComponentTupleRegistry{};
+  inline static std::map<std::string, AMR>                      sAmrs                  {};
+  inline static std::map<std::uint64_t, ISystem *>              sSystems               {};
+  inline static std::set<Job, Job>                              sJobs                  {};
 
-  template<typename C, bool AsLogicalIndex>
-  requires std::is_base_of_v<IComponent, C>
-  inline static std::uint8_t  Type2Index() noexcept
+  template<typename Component, bool AsLogicalIndex>
+  requires std::is_base_of_v<IComponent, Component>
+  inline static std::uint8_t  Component2Index() noexcept
   {
-    auto const typeIt{ sTypeRegistry.find(typeid(C).hash_code()) };
+    auto const compIt{ sComponentRegistry.find(typeid(Component).hash_code()) };
 
-    if (typeIt == sTypeRegistry.end())
+    if (compIt == sComponentRegistry.end())
     {
       Key key
       {
-        .mLogicalIndex{ sDistinctTypeCount },
-        .mMaskBit     { static_cast<std::uint8_t>(1 << sDistinctTypeCount) },
+        .mLogicalIndex{ sDistinctComponentCount },
+        .mMaskBit     { static_cast<std::uint8_t>(1 << sDistinctComponentCount) },
       };
 
-      sDistinctTypeCount++;
+      sDistinctComponentCount++;
 
-      auto const [resultIt, _] { sTypeRegistry.emplace(typeid(C).hash_code(), key) };
+      auto const [resultIt, _] { sComponentRegistry.emplace(typeid(Component).hash_code(), key) };
 
       if constexpr (AsLogicalIndex) return resultIt->second.mLogicalIndex;
       else                          return resultIt->second.mMaskBit;
     }
 
-    if constexpr (AsLogicalIndex) return typeIt->second.mLogicalIndex;
-    else                          return typeIt->second.mMaskBit;
+    if constexpr (AsLogicalIndex) return compIt->second.mLogicalIndex;
+    else                          return compIt->second.mMaskBit;
   }
 
-  template<typename A>
-  requires std::is_base_of_v<IActor, A>
-  inline static A *           CreateActor(std::string const & actorName) noexcept
+  template<typename ... Components>
+  requires (std::is_base_of_v<IComponent, typename Identity<Components>::Type> && ...)
+  inline static std::type_info const * ComponentTuple2Index() noexcept
   {
-    Actor actor
+    auto const compTupleIt{ sComponentTupleRegistry.find(typeid(std::tuple<typename Identity<Components>::Type> ...).hash_code()) };
+
+    if (compTupleIt == sComponentTupleRegistry.end())
     {
-      .mpActor     { new A{ actorName } },
+      auto const [resultIt, _]
+      {
+        sComponentTupleRegistry.emplace(
+          typeid(std::tuple<typename Identity<Components>::Type> ...).hash_code(),
+          & typeid(std::tuple<typename Identity<Components>::Type> ...))
+      };
+
+      return resultIt->second;
+    }
+
+    return compTupleIt->second;
+  }
+
+  // implement mem pool
+  template<typename Actor>
+  requires std::is_base_of_v<IActor, Actor>
+  inline static Actor *       GetOrCreateActor(std::string const & actorName) noexcept
+  {
+    AMR amr
+    {
+      .mpActor     { new Actor{ actorName } },
       .mMask       {},
       .mppRegisters{ static_cast<void * *>(std::malloc(sizeof(void *) * 64)) },
     };
 
-    std::memset(actor.mppRegisters, 0, sizeof(void *) * 64);
+    std::memset(amr.mppRegisters, 0, sizeof(void *) * 64);
 
-    auto const [actorIt, _] { sActors.emplace(actorName, actor) };
-    return reinterpret_cast<A *>(actorIt->second.mpActor);
+    auto const [amrIt, _] { sAmrs.emplace(actorName, amr) };
+    return reinterpret_cast<Actor *>(amrIt->second.mpActor);
   }
 
-  template<typename C, typename ... Args>
-  requires std::is_base_of_v<IComponent, C>
-  inline static C *           GetOrAttachComponent(std::string const & actorName, Args && ... args) noexcept
+  template<typename Component, typename ... Args>
+  requires std::is_base_of_v<IComponent, Component>
+  inline static Component *   GetOrCreateComponent(std::string const & actorName, Args && ... args) noexcept
   {
-    auto const actorIt{ sActors.find(actorName) };
-    if (actorIt == sActors.end()) return nullptr;
+    auto const amrIt{ sAmrs.find(actorName) };
+    if (amrIt == sAmrs.end()) return nullptr;
 
-    Actor & actor{ actorIt->second };
+    AMR & amr{ amrIt->second };
 
-    std::uint8_t const logicalIndex{ Type2Index<C, true>() };
-    std::uint8_t const maskBit{ Type2Index<C, false>() };
+    std::uint8_t const logicalIndex{ Component2Index<Component, true>() };
+    std::uint8_t const maskBit{ Component2Index<Component, false>() };
 
-    if (! (actor.mMask & maskBit))
+    if (! (amr.mMask & maskBit))
     {
-      actor.mMask |= maskBit;
-      actor.mppRegisters[logicalIndex] = new C{ std::forward<Args>(args) ... };
+      amr.mMask |= maskBit;
+      amr.mppRegisters[logicalIndex] = new Component{ std::forward<Args>(args) ... };
     }
 
-    return reinterpret_cast<C *>(actor.mppRegisters[logicalIndex]);
+    return reinterpret_cast<Component *>(amr.mppRegisters[logicalIndex]);
   }
 
   template<typename ... Systems>
@@ -148,71 +170,54 @@ namespace ACS
     }
   }
 
-  template<typename S, typename ... Components>
-  requires std::is_base_of_v<ISystem, S> && (std::is_base_of_v<IComponent, Components> && ...)
-  inline static void          SubmitJob(S * pInstance) noexcept
+  template<typename System, typename ... Components>
+  requires std::is_base_of_v<ISystem, System> && (std::is_base_of_v<IComponent, Components> && ...)
+  inline static void          SubmitJob(System * pSystem) noexcept
   {
     Job job
     {
-      .mMask     { (Type2Index<typename Identity<Components>::Type, false>() | ... | 0u) },
-      .mpInstance{ pInstance },
+      .mMask     { (Component2Index<typename Identity<Components>::Type, false>() | ... | 0u) },
+      .mpArgsInfo{ & typeid(std::tuple<typename Identity<Components>::Type ...>) },
+      .mpSystem  { pSystem },
       .mNumArgs  { sizeof ... (Components) },
     };
+
+    // register componentTuple2function mapping
 
     sJobs.insert(job);
   }
 
+  template<typename ... Components>
+  requires (std::is_base_of_v<IComponent, Components> && ...)
+  inline static auto          MaskToTuple(std::uint8_t mask)
+  {
+    std::uint8_t bit{};
+
+    while (255 > bit << 1)
+    {
+
+    }
+
+    return {};
+  }
+
   // maybe parallelize?
+  // REMOVE FOLD!!!
   template<typename ... Systems>
   requires (std::is_base_of_v<ISystem, Systems> && ...)
   inline static void          DispatchSystems() noexcept
   {
-    for (auto const & [name, actor] : sActors)
+    for (auto const & [name, amr] : sAmrs)
     {
       for (auto const & job : sJobs)
       {
         (
           (
-            (job.mMask == actor.mMask)
-              ? (* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance))(reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpInstance), actor.mppRegisters)
+            (/*pSystem.mMask & job.mMaskSystem &&*/ amr.mMask & job.mMask) // job mask contains components
+              ? (* reinterpret_cast<typename Identity<Systems>::Pointer>(job.mpSystem))()
               : void()
           )
         , ...);
-
-        // fold here.. ?
-
-        // build args tuple
-        //for (std::uint8_t i{ 1 }; i < job.mNumArgs; i++)
-        //{
-        //  if (job.mMask & (1 << i)) Component0 * pTransform{ reinterpret_cast<Component0 *>(actor.mppRegisters[i]) };
-        //}
-        //
-        //Component2 * pDecal{ reinterpret_cast<Component2 *>(actor.mppRegisters[0]) };
-        //Component5 * pBlockDynamic{ reinterpret_cast<Component5 *>(actor.mppRegisters[1]) };
-
-        // decode components from registers!
-
-        // static approach
-        //if (job.mMask & Type2Index<BlockResource, false>())
-        //{
-        //  BlockResource * pBlockResource{ reinterpret_cast<BlockResource *>(actor.mpRegisters[Type2Index<BlockResource, true>()]) };
-        //}
-        //
-        //if (job.mMask & Type2Index<Decal, false>())
-        //{
-        //  Decal * pDecal{ reinterpret_cast<Decal *>(actor.mpRegisters[Type2Index<Decal, true>()]) };
-        //}
-
-        // dynamic approach
-        //for (std::uint8_t i{ 128 }; i > 0; i >>= 1)
-        //{
-        //  std::cout << std::bitset<8>(i) << std::endl;
-        //
-        //  if (job.mMask & i) // found active component
-        //  {
-        //
-        //  }
-        //}
       }
     }
   }

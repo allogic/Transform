@@ -2,13 +2,13 @@
 
 #include <Common.h>
 
-#include <olcPixelGameEngine.h>
-
-#include <string>
-
 #ifndef ACS_EXCLUDE
 #include <ACS.h>
 #endif
+
+#include <string>
+
+#include <olcPixelGameEngine.h>
 
 struct Transform : IComponent
 {
